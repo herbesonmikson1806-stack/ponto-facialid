@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ponto Facial — Protótipo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/face-api.js/0.22.2/face-api.min.js"></script>
+<style>
+  :root{
+    --ink:#132A32;
+    --paper:#F3F1EA;
+    --line:#DAD5C7;
+    --teal:#1F5E5B;
+    --teal-deep:#123B3A;
+    --amber:#C97A2B;
+    --ok:#2C6E49;
+    --err:#A63B3B;
+    --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, Segoe UI, sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:var(--sans); background:var(--paper); color:var(--ink);
+    padding:28px 20px 60px;
+  }
+  .wrap{max-width:960px; margin:0 auto;}
+  header{
+    display:flex; align-items:baseline; justify-content:space-between;
+    border-bottom:2px solid var(--ink); padding-bottom:14px; margin-bottom:24px;
+    flex-wrap:wrap; gap:8px;
+  }
+  header h1{
+    font-size:22px; margin:0; font-weight:700; letter-spacing:-0.01em;
+  }
+  header .clock{
+    font-family:var(--mono); font-size:15px; color:var(--teal-deep); font-weight:500;
+  }
+  .grid{display:grid; grid-template-columns:340px 1fr; gap:24px;}
+  @media (max-width:760px){ .grid{grid-template-columns:1fr;} }
+
+  .panel{
+    background:#fff; border:1px solid var(--line); padding:20px;
+  }
+  .panel h2{
+    font-size:13px; text-transform:uppercase; letter-spacing:.06em; margin:0 0 16px;
+    color:var(--teal-deep); font-weight:600; border-bottom:1px solid var(--line); padding-bottom:10px;
+  }
+
+  video, canvas{ width:100%; display:block; background:#0d1f20; }
+  video{ aspect-ratio:4/3; object-fit:cover; }
+  .cam-box{ position:relative; overflow:hidden; border:1px solid var(--line); }
+  .cam-box canvas{ position:absolute; top:0; left:0; width:100%; height:100%; }
+
+  @media (max-width:480px){
+    body{ padding:16px 12px 50px; }
+    header h1{ font-size:18px; }
+    button{ padding:14px 16px; font-size:15px; }
+    .field input{ padding:12px 10px; font-size:16px; } /* 16px avoids iOS zoom-on-focus */
+  }
+
+  .status{
+    font-family:var(--mono); font-size:13px; margin-top:10px; padding:10px 12px;
+    border-left:3px solid var(--teal); background:#EEF3EF; min-height:18px; line-height:1.5;
+  }
+  .status.err{ border-color:var(--err); background:#F7EAEA; color:var(--err); }
+  .status.ok{ border-color:var(--ok); background:#EAF3EC; color:var(--ok); }
+
+  .field{margin-bottom:12px;}
+  .field label{ display:block; font-size:12px; margin-bottom:5px; color:#555; }
+  .field input{
+    width:100%; padding:9px 10px; border:1px solid var(--line); font-family:var(--sans);
+    font-size:14px; background:var(--paper);
+  }
+  .field input:focus{ outline:2px solid var(--teal); outline-offset:-1px; }
+
+  button{
+    font-family:var(--sans); font-weight:600; font-size:13.5px; border:none;
+    padding:11px 16px; cursor:pointer; width:100%; margin-top:4px;
+  }
+  button.primary{ background:var(--teal); color:#fff; }
+  button.primary:hover{ background:var(--teal-deep); }
+  button.amber{ background:var(--amber); color:#fff; }
+  button.amber:hover{ background:#a9611d; }
+  button:disabled{ background:#B9C3C2; cursor:not-allowed; }
+  button.ghost{ background:transparent; color:var(--teal-deep); border:1px solid var(--line); }
+
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+    color:#666; padding:8px 6px; border-bottom:1px solid var(--ink); font-weight:600;
+  }
+  td{ padding:9px 6px; border-bottom:1px solid var(--line); }
+  td.tag{ font-family:var(--mono); font-size:11.5px; }
+  .tag.in{ color:var(--ok); }
+  .tag.out{ color:var(--amber); }
+  .empty{ padding:30px 10px; text-align:center; color:#888; font-size:13.5px; }
+
+  .list-item{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 0; border-bottom:1px solid var(--line); font-size:13.5px;
+  }
+  .list-item button{ width:auto; padding:5px 10px; font-size:12px; background:transparent; color:var(--err); border:1px solid var(--line); }
+
+  .note{ font-size:12px; color:#777; margin-top:16px; line-height:1.6; border-top:1px solid var(--line); padding-top:12px; }
+  .badge{ display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 7px; background:var(--teal-deep); color:#fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Registro de Ponto — Reconhecimento Facial <span class="badge">protótipo</span></h1>
+    <div class="clock" id="clock">--:--:--</div>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: camera + actions -->
+    <div class="panel">
+      <h2>Câmera</h2>
+      <div class="cam-box">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div class="status" id="status">Iniciando modelos de reconhecimento…</div>
+
+      <div class="field" style="margin-top:16px;">
+        <label>Nome do funcionário (para cadastro)</label>
+        <input id="nameInput" placeholder="Ex.: Maria Souza">
+      </div>
+      <div class="row2">
+        <button class="primary" id="btnEnroll" disabled>Cadastrar rosto</button>
+        <button class="amber" id="btnClock" disabled>Bater ponto</button>
+      </div>
+
+      <div class="note" id="modeNote"></div>
+    </div>
+
+    <!-- RIGHT: registered + log -->
+    <div class="panel" style="margin-bottom:20px;">
+      <h2>Funcionários cadastrados (<span id="empCount">0</span>)</h2>
+      <div id="empList"><div class="empty">Nenhum funcionário cadastrado ainda.</div></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px;">
+    <h2>Espelho de ponto — hoje</h2>
+    <table id="logTable">
+      <thead>
+        <tr><th>Horário</th><th>Funcionário</th><th>Tipo</th><th>Confiança</th></tr>
+      </thead>
+      <tbody id="logBody"></tbody>
+    </table>
+    <div class="empty" id="logEmpty">Nenhuma batida registrada hoje.</div>
+  </div>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const statusEl = document.getElementById('status');
+const btnEnroll = document.getElementById('btnEnroll');
+const btnClock = document.getElementById('btnClock');
+const nameInput = document.getElementById('nameInput');
+const empList = document.getElementById('empList');
+const empCount = document.getElementById('empCount');
+const logBody = document.getElementById('logBody');
+const logEmpty = document.getElementById('logEmpty');
+const modeNote = document.getElementById('modeNote');
+const clockEl = document.getElementById('clock');
+
+let employees = [];   // {name, descriptor (Float32Array-like array)}
+let logs = [];         // {time, name, type, score}
+let modelsReady = false;
+let fallbackMode = false;
+let currentDescriptor = null;
+const MATCH_THRESHOLD = 0.5; // face-api distance threshold (lower = stricter)
+
+function setStatus(msg, kind){
+  statusEl.textContent = msg;
+  statusEl.className = 'status' + (kind ? ' '+kind : '');
+}
+
+function tick(){
+  clockEl.textContent = new Date().toLocaleTimeString('pt-BR');
+}
+setInterval(tick, 1000); tick();
+
+// ---- Storage (persists across sessions) ----
+async function loadState(){
+  try{
+    const emp = await window.storage.get('employees', false);
+    if(emp) employees = JSON.parse(emp.value);
+  }catch(e){ employees = []; }
+  try{
+    const lg = await window.storage.get('logs-'+todayKey(), false);
+    if(lg) logs = JSON.parse(lg.value);
+  }catch(e){ logs = []; }
+  renderEmployees();
+  renderLogs();
+}
+async function saveEmployees(){
+  try{ await window.storage.set('employees', JSON.stringify(employees), false); }catch(e){}
+}
+async function saveLogs(){
+  try{ await window.storage.set('logs-'+todayKey(), JSON.stringify(logs), false); }catch(e){}
+}
+function todayKey(){
+  const d = new Date();
+  return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+}
+
+// ---- Camera ----
+async function startCamera(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'user', width:{ideal:480}, height:{ideal:360} }
+    });
+    video.srcObject = stream;
+    await new Promise(r => video.onloadedmetadata = r);
+    overlay.width = video.videoWidth; overlay.height = video.videoHeight;
+  }catch(e){
+    setStatus('Não foi possível acessar a câmera. Verifique as permissões do navegador.', 'err');
+  }
+}
+
+// ---- Model loading (real face-api.js models) ----
+async function loadModels(){
+  const BASES = [
+    'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights',
+    'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights'
+  ];
+  for(const base of BASES){
+    try{
+      await faceapi.nets.tinyFaceDetector.loadFromUri(base);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(base);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(base);
+      modelsReady = true;
+      return true;
+    }catch(e){ /* try next base */ }
+  }
+  return false;
+}
+
+// ---- Simplified fallback "descriptor" (average color grid) ----
+// Used only if the real ML models can't be fetched in this environment.
+// Clearly a stand-in — not real biometric recognition — but keeps the
+// enrollment/clock-in workflow demonstrable end-to-end.
+function fallbackDescriptor(video){
+  const c = document.createElement('canvas');
+  c.width = 40; c.height = 40;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(video, 0, 0, 40, 40);
+  const data = ctx.getImageData(0,0,40,40).data;
+  const grid = 8, cell = 40/grid;
+  const vec = [];
+  for(let gy=0; gy<grid; gy++){
+    for(let gx=0; gx<grid; gx++){
+      let r=0,g=0,b=0,n=0;
+      for(let y=0; y<cell; y++){
+        for(let x=0; x<cell; x++){
+          const px = Math.floor(gx*cell+x), py = Math.floor(gy*cell+y);
+          const i = (py*40+px)*4;
+          r+=data[i]; g+=data[i+1]; b+=data[i+2]; n++;
+        }
+      }
+      vec.push(r/n/255, g/n/255, b/n/255);
+    }
+  }
+  return vec;
+}
+function euclidean(a,b){
+  let s=0; for(let i=0;i<a.length;i++){ s += (a[i]-b[i])**2; }
+  return Math.sqrt(s);
+}
+
+// ---- Descriptor extraction (real or fallback) ----
+async function extractDescriptor(){
+  if(modelsReady){
+    const det = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks().withFaceDescriptor();
+    if(!det) return null;
+    drawBox(det.detection.box);
+    return { vec: Array.from(det.descriptor), real:true };
+  } else {
+    // fallback still requires a face-ish frame; we just sample the frame
+    drawBox(null);
+    return { vec: fallbackDescriptor(video), real:false };
+  }
+}
+
+function drawBox(box){
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+  if(box){
+    ctx.strokeStyle = '#C97A2B'; ctx.lineWidth = 2;
+    ctx.strokeRect(box.x, box.y, box.width, box.height);
+  }
+}
+
+// ---- Enrollment ----
+btnEnroll.addEventListener('click', async () => {
+  const name = nameInput.value.trim();
+  if(!name){ setStatus('Digite o nome do funcionário antes de cadastrar.', 'err'); return; }
+  setStatus('Capturando rosto para cadastro…');
+  const result = await extractDescriptor();
+  if(!result){ setStatus('Nenhum rosto detectado. Posicione-se de frente para a câmera.', 'err'); return; }
+  employees.push({ name, vec: result.vec, real: result.real });
+  await saveEmployees();
+  renderEmployees();
+  nameInput.value = '';
+  setStatus('Funcionário "'+name+'" cadastrado com sucesso.', 'ok');
+});
+
+// ---- Clock in/out ----
+btnClock.addEventListener('click', async () => {
+  if(employees.length === 0){ setStatus('Cadastre ao menos um funcionário antes de bater ponto.', 'err'); return; }
+  setStatus('Reconhecendo rosto…');
+  const result = await extractDescriptor();
+  if(!result){ setStatus('Nenhum rosto detectado. Posicione-se de frente para a câmera.', 'err'); return; }
+
+  let best = null, bestDist = Infinity;
+  for(const emp of employees){
+    const d = euclidean(result.vec, emp.vec);
+    if(d < bestDist){ bestDist = d; best = emp; }
+  }
+
+  const threshold = result.real ? MATCH_THRESHOLD : 0.06; // fallback vec is normalized 0..1 per channel
+  if(!best || bestDist > threshold){
+    setStatus('Rosto não reconhecido. Cadastre-se ou tente novamente.', 'err');
+    return;
+  }
+
+  const lastForEmp = [...logs].reverse().find(l => l.name === best.name);
+  const type = (!lastForEmp || lastForEmp.type === 'saída') ? 'entrada' : 'saída';
+  const confidence = Math.max(0, Math.round((1 - bestDist/ (result.real?1:0.3)) * 100));
+  logs.push({ time: new Date().toLocaleTimeString('pt-BR'), name: best.name, type, score: confidence });
+  await saveLogs();
+  renderLogs();
+  setStatus(best.name + ' — ' + type.toUpperCase() + ' registrada às ' + logs[logs.length-1].time + '.', 'ok');
+});
+
+// ---- Rendering ----
+function renderEmployees(){
+  empCount.textContent = employees.length;
+  if(employees.length === 0){
+    empList.innerHTML = '<div class="empty">Nenhum funcionário cadastrado ainda.</div>';
+    return;
+  }
+  empList.innerHTML = '';
+  employees.forEach((emp, idx) => {
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = '<span>'+emp.name+'</span>';
+    const btn = document.createElement('button');
+    btn.textContent = 'Remover';
+    btn.addEventListener('click', async () => {
+      employees.splice(idx,1);
+      await saveEmployees();
+      renderEmployees();
+    });
+    div.appendChild(btn);
+    empList.appendChild(div);
+  });
+}
+
+function renderLogs(){
+  logBody.innerHTML = '';
+  if(logs.length === 0){
+    logEmpty.style.display = 'block';
+    document.getElementById('logTable').style.display = 'none';
+    return;
+  }
+  logEmpty.style.display = 'none';
+  document.getElementById('logTable').style.display = 'table';
+  [...logs].reverse().forEach(l => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>'+l.time+'</td><td>'+l.name+'</td>'
+      + '<td class="tag '+(l.type==='entrada'?'in':'out')+'">'+l.type.toUpperCase()+'</td>'
+      + '<td>'+l.score+'%</td>';
+    logBody.appendChild(tr);
+  });
+}
+
+// ---- Boot ----
+(async function boot(){
+  await startCamera();
+  const ok = await loadModels();
+  if(ok){
+    modeNote.innerHTML = 'Modo <b>reconhecimento real</b> (face-api.js): compara descritores faciais de 128 dimensões extraídos por rede neural.';
+    setStatus('Modelos carregados. Pronto para cadastrar ou bater ponto.', 'ok');
+  } else {
+    fallbackMode = true;
+    modeNote.innerHTML = 'Os modelos de rede neural não puderam ser baixados neste ambiente (sem acesso ao CDN de pesos). '
+      + 'Ativado <b>modo demonstração</b>: usa uma assinatura simplificada de cor/textura do rosto só para simular o fluxo de cadastro e reconhecimento — '
+      + 'não é reconhecimento facial real. Rodando fora deste sandbox, com acesso normal à internet, o modo real é carregado automaticamente.';
+    setStatus('Modo demonstração ativo (sem modelos de IA). Pronto para cadastrar ou bater ponto.', 'ok');
+  }
+  btnEnroll.disabled = false;
+  btnClock.disabled = false;
+  await loadState();
+})();
+</script>
+</body>
+</html>
